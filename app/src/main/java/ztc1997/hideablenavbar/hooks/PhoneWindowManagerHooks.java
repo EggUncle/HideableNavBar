@@ -26,6 +26,7 @@ import android.view.Display;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XSharedPreferences;
+import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import ztc1997.hideablenavbar.BuildConfig;
 import ztc1997.hideablenavbar.SettingsActivity;
@@ -41,6 +42,7 @@ public class PhoneWindowManagerHooks {
     private static int sNavBarWp, sNavBarHp, sNavBarHl, sNavBarWpOrigin, sNavBarHpOrigin, sNavBarHlOrigin;
     private static Object sPhoneWindowManager;
     private static Context sContext;
+    private static boolean isHide;
 
     private static BroadcastReceiver sHideNavBarReceiver = new BroadcastReceiver() {
         @Override
@@ -48,6 +50,7 @@ public class PhoneWindowManagerHooks {
             switch (intent.getAction()) {
                 case ACTION_HIDE_NAV_BAR:
                     hideNavBar();
+                    isHide = true;
                     break;
 
                 case SettingsActivity.ACTION_PREF_CHANGED:
@@ -64,7 +67,7 @@ public class PhoneWindowManagerHooks {
         }
     };
 
-    public static void doHook(ClassLoader loader) {
+    public static void doHook(ClassLoader loader) throws Throwable {
         final XSharedPreferences preferences = new XSharedPreferences(BuildConfig.APPLICATION_ID);
 
         final String CLASS_PHONE_WINDOW_MANAGER = Build.VERSION.SDK_INT < Build.VERSION_CODES.M ?
@@ -73,10 +76,11 @@ public class PhoneWindowManagerHooks {
         final String CLASS_IWINDOW_MANAGER = "android.view.IWindowManager";
         final String CLASS_WINDOW_MANAGER_FUNCS = "android.view.WindowManagerPolicy.WindowManagerFuncs";
 
-        XposedHelpers.findAndHookMethod(CLASS_PHONE_WINDOW_MANAGER, loader, "init",
+        Class<?> pwmClass = loader.loadClass(CLASS_PHONE_WINDOW_MANAGER);
+        XposedHelpers.findAndHookMethod(pwmClass, "init",
                 Context.class, CLASS_IWINDOW_MANAGER, CLASS_WINDOW_MANAGER_FUNCS, new XC_MethodHook() {
                     @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    protected void afterHookedMethod(final MethodHookParam param) throws Throwable {
                         super.afterHookedMethod(param);
                         log(TAG + XposedHelpers.getObjectField(param.thisObject, "mWindowManagerFuncs").getClass().getName());
                         sPhoneWindowManager = param.thisObject;
@@ -92,10 +96,6 @@ public class PhoneWindowManagerHooks {
                         sNavBarHpOrigin = res.getDimensionPixelSize(resHeightId);
                         sNavBarHlOrigin = res.getDimensionPixelSize(resHeightLandscapeId);
 
-                        sNavBarWp = (int) ((float) sNavBarWpOrigin * preferences.getInt(SettingsActivity.PREF_NAVBAR_WIDTH, 100) / 100);
-                        sNavBarHp = (int) ((float) sNavBarHpOrigin * preferences.getInt(SettingsActivity.PREF_NAVBAR_HEIGHT_PORT, 100) / 100);
-                        sNavBarHl = (int) ((float) sNavBarHlOrigin * preferences.getInt(SettingsActivity.PREF_NAVBAR_HEIGHT_LAND, 100) / 100);
-
                         IntentFilter intentFilter = new IntentFilter();
                         intentFilter.addAction(ACTION_HIDE_NAV_BAR);
                         intentFilter.addAction(SettingsActivity.ACTION_PREF_CHANGED);
@@ -109,14 +109,12 @@ public class PhoneWindowManagerHooks {
 
                             @Override
                             public void onSwipeFromBottom() {
-                                if (XposedHelpers.getBooleanField(sPhoneWindowManager, "mNavigationBarOnBottom"))
-                                    showNavBar();
+                                showNavBar();
+                                isHide = false;
                             }
 
                             @Override
                             public void onSwipeFromRight() {
-                                if (!XposedHelpers.getBooleanField(sPhoneWindowManager, "mNavigationBarOnBottom"))
-                                    showNavBar();
                             }
 
                             @Override
@@ -133,7 +131,11 @@ public class PhoneWindowManagerHooks {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                         super.afterHookedMethod(param);
-                        showNavBar();
+                        if (isHide) {
+                            hideNavBar();
+                        } else {
+                            showNavBar();
+                        }
                     }
                 });
 
@@ -149,38 +151,32 @@ public class PhoneWindowManagerHooks {
     }
 
     public static void showNavBar() {
-        setNavBarDimensions(sNavBarWp, sNavBarHp, sNavBarHl);
+        setNavBarDimensions(sNavBarWp, sNavBarHpOrigin, sNavBarHl);
     }
 
     public static void hideNavBar() {
         setNavBarDimensions(0, 0, 0);
     }
 
+
     private static void setNavBarDimensions(int wp, int hp, int hl) {
-        int[] navigationBarWidthForRotation = (int[]) XposedHelpers.getObjectField(
-                sPhoneWindowManager, "mNavigationBarWidthForRotation");
-        int[] navigationBarHeightForRotation = (int[]) XposedHelpers.getObjectField(
-                sPhoneWindowManager, "mNavigationBarHeightForRotation");
+        int[] navigationBarHeightForRotation;
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
+            navigationBarHeightForRotation = (int[]) XposedHelpers.getObjectField(
+                    sPhoneWindowManager, "mNavigationBarHeightForRotation");
+        } else {
+            navigationBarHeightForRotation = (int[]) XposedHelpers.getObjectField(
+                    sPhoneWindowManager, "mNavigationBarHeightForRotationDefault");
+        }
+
         final int portraitRotation = XposedHelpers.getIntField(sPhoneWindowManager, "mPortraitRotation");
         final int upsideDownRotation = XposedHelpers.getIntField(sPhoneWindowManager, "mUpsideDownRotation");
-        final int landscapeRotation = XposedHelpers.getIntField(sPhoneWindowManager, "mLandscapeRotation");
-        final int seascapeRotation = XposedHelpers.getIntField(sPhoneWindowManager, "mSeascapeRotation");
-        if (navigationBarHeightForRotation[portraitRotation] == hp && navigationBarHeightForRotation[landscapeRotation] == hl
-                && navigationBarWidthForRotation[portraitRotation] == wp && navigationBarWidthForRotation[landscapeRotation] == wp)
+        if (navigationBarHeightForRotation[portraitRotation] == hp)
             return;
 
         navigationBarHeightForRotation[portraitRotation] =
                 navigationBarHeightForRotation[upsideDownRotation] =
                         hp;
-        navigationBarHeightForRotation[landscapeRotation] =
-                navigationBarHeightForRotation[seascapeRotation] =
-                        hl;
-
-        navigationBarWidthForRotation[portraitRotation] =
-                navigationBarWidthForRotation[upsideDownRotation] =
-                        navigationBarWidthForRotation[landscapeRotation] =
-                                navigationBarWidthForRotation[seascapeRotation] =
-                                        wp;
         XposedHelpers.callMethod(sPhoneWindowManager, "updateRotation", false);
     }
 

@@ -17,6 +17,7 @@
 package ztc1997.hideablenavbar.hooks;
 
 import android.content.res.Resources;
+import android.graphics.Color;
 import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,6 +27,7 @@ import android.widget.LinearLayout;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
+import ztc1997.hideablenavbar.R;
 import ztc1997.hideablenavbar.XposedInit;
 import ztc1997.hideablenavbar.view.KeyButtonView;
 
@@ -38,21 +40,27 @@ public class SystemUIHooks {
     private static View sNavBar;
 
     public static void doHook(ClassLoader loader) {
-        final Class<?> CLASS_NAVIGATION_BAR_VIEW = XposedHelpers.findClass("com.android.systemui.statusbar.phone.NavigationBarView", loader);
+        final Class<?> CLASS_NAVIGATION_BAR_VIEW = XposedHelpers.findClass("com.android.systemui.statusbar.phone.NavigationBarInflaterView", loader);
         XposedHelpers.findAndHookMethod(CLASS_NAVIGATION_BAR_VIEW, "onFinishInflate", new XC_MethodHook() {
             @Override
             protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                 super.afterHookedMethod(param);
                 sNavBar = (View) param.thisObject;
                 Resources res = sNavBar.getResources();
-                View[] mRotatedViews = (View[]) XposedHelpers.getObjectField(sNavBar, "mRotatedViews");
+          //      View[] mRotatedViews = (View[]) XposedHelpers.getObjectField(sNavBar, "mRotatedViews");
 
-                ViewGroup navBtnsRot0 = (ViewGroup) mRotatedViews[Surface.ROTATION_0]
-                        .findViewById(res.getIdentifier("nav_buttons", "id", XposedInit.PACKAGE_SYSTEMUI));
-                ViewGroup navBtnsRot90 = (ViewGroup) mRotatedViews[Surface.ROTATION_90]
-                        .findViewById(res.getIdentifier("nav_buttons", "id", XposedInit.PACKAGE_SYSTEMUI));
-                navBtnsRot0.removeViewAt(0);
-                navBtnsRot90.removeViewAt(navBtnsRot90.getChildCount() - 1);
+                FrameLayout navbar0 = (FrameLayout) XposedHelpers.getObjectField(param.thisObject, "mRot0");
+                FrameLayout navbarBtns0 = (FrameLayout) navbar0.getChildAt(0);
+
+
+
+//                ViewGroup navBtnsRot0 = (ViewGroup) mRotatedViews[Surface.ROTATION_0]
+//                        .findViewById(res.getIdentifier("nav_buttons", "id", XposedInit.PACKAGE_SYSTEMUI));
+//                ViewGroup navBtnsRot90 = (ViewGroup) mRotatedViews[Surface.ROTATION_90]
+//                        .findViewById(res.getIdentifier("nav_buttons", "id", XposedInit.PACKAGE_SYSTEMUI));
+
+//                navBtnsRot0.removeViewAt(0);
+//                navBtnsRot90.removeViewAt(navBtnsRot90.getChildCount() - 1);
 
                 final float scale = sNavBar.getContext().getResources().getDisplayMetrics().density;
                 int navigationSidePadding = (int) (40 * scale);
@@ -77,17 +85,17 @@ public class SystemUIHooks {
                 hideNavBtn0.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                 hideNavBtn0.setOnClickListener(onHideNavBtnClickListener);
                 hideNavContainer0.addView(hideNavBtn0);
-                navBtnsRot0.addView(hideNavContainer0, 0);
+                navbar0.addView(hideNavContainer0, 0);
 
-                FrameLayout hideNavContainer90 = new FrameLayout(sNavBar.getContext());
-                hideNavContainer90.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, navigationSidePadding));
-                ImageView hideNavBtn90 = new KeyButtonView(sNavBar.getContext());
-                hideNavBtn90.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, navigationExtraKeyWidth));
-                hideNavBtn90.setImageResource(XposedInit.getIcHideLandIdId());
-                hideNavBtn90.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                hideNavBtn90.setOnClickListener(onHideNavBtnClickListener);
-                hideNavContainer90.addView(hideNavBtn90);
-                navBtnsRot90.addView(hideNavContainer90, navBtnsRot90.getChildCount());
+//                FrameLayout hideNavContainer90 = new FrameLayout(sNavBar.getContext());
+//                hideNavContainer90.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, navigationSidePadding));
+//                ImageView hideNavBtn90 = new KeyButtonView(sNavBar.getContext());
+//                hideNavBtn90.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, navigationExtraKeyWidth));
+//                hideNavBtn90.setImageResource(XposedInit.getIcHideLandIdId());
+//                hideNavBtn90.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+//                hideNavBtn90.setOnClickListener(onHideNavBtnClickListener);
+//                hideNavContainer90.addView(hideNavBtn90);
+//                navBtnsRot90.addView(hideNavContainer90, navBtnsRot90.getChildCount());
             }
         });
     }
